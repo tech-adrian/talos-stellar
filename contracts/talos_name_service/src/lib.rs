@@ -9,7 +9,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
+    contract, contractimpl, contracttype, symbol_short, Address, Env, String,
 };
 
 // ── Data Types ──────────────────────────────────────────────────────

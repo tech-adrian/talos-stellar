@@ -9,7 +9,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, vec, Address, Env, Map, String, Vec,
+    contract, contractimpl, contracttype, symbol_short, Address, Env, String,
 };
 
 // ── Data Types ──────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ impl TalosRegistry {
         patron: Patron,
         kernel: Kernel,
         pulse: Pulse,
-        protocol_wallet: Address,
+        _protocol_wallet: Address,
     ) -> u32 {
         // Require creator authorization
         patron.creator_addr.require_auth();
