@@ -69,14 +69,16 @@ describe("POST /api/talos — create", () => {
 });
 
 describe("GET /api/talos — list", () => {
-  it("returns an array including the created talos", async () => {
+  it("returns paginated data including the created talos", async () => {
     const res = await api("/api/talos");
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(Array.isArray(body)).toBe(true);
+    expect(body.data).toBeDefined();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.nextCursor).toBeUndefined(); // May not exist on first page
 
-    const found = body.find((c: { id: string }) => c.id === talosId);
+    const found = body.data.find((c: { id: string }) => c.id === talosId);
     expect(found).toBeDefined();
     expect(found.name).toBe("E2E Test Agent");
     // apiKey should NOT be exposed in list
@@ -237,7 +239,7 @@ describe("GET /api/talos/:id/patrons — list patrons", () => {
 });
 
 describe("POST /api/talos/:id/patrons — become patron", () => {
-  it("rejects without walletAddress", async () => {
+  it("rejects without stellarPublicKey", async () => {
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
       body: JSON.stringify({ pulseAmount: 1000 }),
@@ -248,7 +250,7 @@ describe("POST /api/talos/:id/patrons — become patron", () => {
   it("rejects without pulseAmount", async () => {
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON" }),
+      body: JSON.stringify({ stellarPublicKey: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" }),
     });
     expect(res.status).toBe(400);
   });
@@ -257,7 +259,7 @@ describe("POST /api/talos/:id/patrons — become patron", () => {
     // Default min = totalSupply(500_000) * 0.001 = 500
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON", pulseAmount: 100 }),
+      body: JSON.stringify({ stellarPublicKey: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", pulseAmount: 100 }),
     });
     expect(res.status).toBe(403);
 
@@ -267,24 +269,26 @@ describe("POST /api/talos/:id/patrons — become patron", () => {
   });
 
   it("registers as patron when meeting threshold", async () => {
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON", pulseAmount: 1000 }),
+      body: JSON.stringify({ stellarPublicKey: patronKey, pulseAmount: 1000 }),
     });
     expect(res.status).toBe(201);
 
     const body = await res.json();
     expect(body.talosId).toBe(talosId);
-    expect(body.walletAddress).toBe("0xE2E_PATRON");
+    expect(body.stellarPublicKey).toBe(patronKey);
     expect(body.role).toBe("Investor");
     expect(body.status).toBe("active");
     expect(body.pulseAmount).toBe(1000);
   });
 
   it("rejects duplicate patron registration", async () => {
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON", pulseAmount: 1000 }),
+      body: JSON.stringify({ stellarPublicKey: patronKey, pulseAmount: 1000 }),
     });
     expect(res.status).toBe(409);
   });
@@ -292,7 +296,7 @@ describe("POST /api/talos/:id/patrons — become patron", () => {
   it("returns 404 for non-existent talos", async () => {
     const res = await api("/api/talos/nonexistent_12345/patrons", {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON", pulseAmount: 1000 }),
+      body: JSON.stringify({ stellarPublicKey: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", pulseAmount: 1000 }),
     });
     expect(res.status).toBe(404);
   });
@@ -304,8 +308,9 @@ describe("GET /api/talos/:id/patrons — list after registration", () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
     const found = body.find(
-      (p: { walletAddress: string }) => p.walletAddress === "0xE2E_PATRON"
+      (p: { stellarPublicKey: string }) => p.stellarPublicKey === patronKey
     );
     expect(found).toBeDefined();
     expect(found.status).toBe("active");
@@ -313,7 +318,7 @@ describe("GET /api/talos/:id/patrons — list after registration", () => {
 });
 
 describe("DELETE /api/talos/:id/patrons — withdraw patron", () => {
-  it("rejects without walletAddress", async () => {
+  it("rejects without stellarPublicKey", async () => {
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "DELETE",
       body: JSON.stringify({}),
@@ -324,15 +329,16 @@ describe("DELETE /api/talos/:id/patrons — withdraw patron", () => {
   it("returns 404 for non-patron wallet", async () => {
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "DELETE",
-      body: JSON.stringify({ walletAddress: "0xNOBODY" }),
+      body: JSON.stringify({ stellarPublicKey: "GYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY" }),
     });
     expect(res.status).toBe(404);
   });
 
   it("withdraws patron status", async () => {
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "DELETE",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON" }),
+      body: JSON.stringify({ stellarPublicKey: patronKey }),
     });
     expect(res.status).toBe(200);
 
@@ -341,9 +347,10 @@ describe("DELETE /api/talos/:id/patrons — withdraw patron", () => {
   });
 
   it("can re-register after withdrawal", async () => {
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
     const res = await api(`/api/talos/${talosId}/patrons`, {
       method: "POST",
-      body: JSON.stringify({ walletAddress: "0xE2E_PATRON", pulseAmount: 2000 }),
+      body: JSON.stringify({ stellarPublicKey: patronKey, pulseAmount: 2000 }),
     });
     expect(res.status).toBe(200); // re-activation returns 200, not 201
 
@@ -694,10 +701,11 @@ describe("POST /api/playbooks/:id/purchase — purchase playbook", () => {
   });
 
   it("purchases a playbook", async () => {
+    const buyerAddr = "GZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
     const res = await api(`/api/playbooks/${playbookId}/purchase`, {
       method: "POST",
       body: JSON.stringify({
-        buyerAddress: "0xE2E_BUYER",
+        buyerAddress: buyerAddr,
         txHash: "0xE2E_PURCHASE_TX",
       }),
     });
@@ -705,13 +713,14 @@ describe("POST /api/playbooks/:id/purchase — purchase playbook", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.playbookId).toBe(playbookId);
-    expect(body.buyerAddress).toBe("0xE2E_BUYER");
+    expect(body.buyerAddress).toBe(buyerAddr);
   });
 
   it("rejects duplicate purchase", async () => {
+    const buyerAddr = "GZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
     const res = await api(`/api/playbooks/${playbookId}/purchase`, {
       method: "POST",
-      body: JSON.stringify({ buyerAddress: "0xE2E_BUYER" }),
+      body: JSON.stringify({ buyerAddress: buyerAddr }),
     });
     expect(res.status).toBe(409);
   });
@@ -719,7 +728,7 @@ describe("POST /api/playbooks/:id/purchase — purchase playbook", () => {
   it("returns 404 for non-existent playbook", async () => {
     const res = await api("/api/playbooks/nonexistent_12345/purchase", {
       method: "POST",
-      body: JSON.stringify({ buyerAddress: "0xSomeone" }),
+      body: JSON.stringify({ buyerAddress: "GWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW" }),
     });
     expect(res.status).toBe(404);
   });
@@ -732,7 +741,8 @@ describe("GET /api/playbooks/purchased — purchased playbooks", () => {
   });
 
   it("returns purchased playbooks for buyer", async () => {
-    const res = await api("/api/playbooks/purchased?wallet=0xE2E_BUYER");
+    const buyerAddr = "GZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+    const res = await api(`/api/playbooks/purchased?wallet=${encodeURIComponent(buyerAddr)}`);
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -747,7 +757,8 @@ describe("GET /api/playbooks/purchased — purchased playbooks", () => {
   });
 
   it("returns empty for unknown wallet", async () => {
-    const res = await api("/api/playbooks/purchased?wallet=0xNOBODY");
+    const unknownAddr = "GYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY";
+    const res = await api(`/api/playbooks/purchased?wallet=${encodeURIComponent(unknownAddr)}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([]);
   });
@@ -821,7 +832,8 @@ describe("GET /api/dashboard", () => {
   });
 
   it("returns dashboard for valid wallet", async () => {
-    const res = await api("/api/dashboard?wallet=0xE2E_PATRON");
+    const patronKey = "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+    const res = await api(`/api/dashboard?wallet=${encodeURIComponent(patronKey)}`);
     expect(res.status).toBe(200);
 
     const body = await res.json();

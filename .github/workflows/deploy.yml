@@ -50,6 +50,10 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Test
+        run: pnpm test:e2e --run
+        continue-on-error: true
+
       # Deploy to Vercel (main branch only, using Vercel CLI)
       - name: Install Vercel CLI
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
