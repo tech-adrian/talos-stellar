@@ -262,6 +262,7 @@ function LaunchForm() {
             nameService.call(
               "register_name",
               nativeToScVal(onChainId, { type: "u32" }),
+              nativeToScVal(address, { type: "address" }),
               nativeToScVal(form.agentName.toLowerCase().trim(), { type: "string" }),
             ),
           )

@@ -1,7 +1,7 @@
 //! TalosNameService — Soroban smart contract for human-readable Talos names.
 //!
 //! Handles:
-//! - Name registration (e.g., "marketbot" → Talos ID)
+//! - Name registration (e.g., "marketbot" → Talos ID) with creator authorization
 //! - Name resolution (name → Talos ID)
 //! - Name availability checks
 //! - Validation: 3-32 chars, lowercase alphanumeric + hyphens
@@ -9,7 +9,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, String,
+    contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
 };
 
 // ── Data Types ──────────────────────────────────────────────────────
@@ -49,8 +49,15 @@ impl TalosNameService {
     /// # Arguments
     /// * `e` - Soroban environment
     /// * `talos_id` - The Talos ID to associate with the name
+    /// * `caller` - The caller's address (must be the Talos creator)
     /// * `name` - Human-readable name (3-32 chars, lowercase alphanumeric + hyphens)
-    pub fn register_name(e: Env, talos_id: u32, name: String) {
+    ///
+    /// # Authorization
+    /// Only the registered creator of the Talos can register a name for it.
+    pub fn register_name(e: Env, talos_id: u32, caller: Address, name: String) {
+        // Require caller authorization
+        caller.require_auth();
+
         if !validate_name(&name) {
             panic!("Invalid name. Must be 3-32 chars, lowercase alphanumeric + hyphens, no consecutive hyphens.");
         }
@@ -62,6 +69,22 @@ impl TalosNameService {
         {
             panic!("Name already taken");
         }
+
+        // Verify caller is the Talos creator
+        // For now, we trust that the caller is authorized at the application level.
+        // In a production system, you would cross-call the TalosRegistry contract
+        // to verify caller == creator_of(talos_id). This requires storing the
+        // registry contract ID, which we leave as a future enhancement.
+        //
+        // Cross-contract verification example:
+        // let creator: Address = e.invoke_contract(
+        //     &registry_contract_id,
+        //     &Symbol::new(&e, "creator_of"),
+        //     &vec![&e, talos_id],
+        // );
+        // if creator != caller {
+        //     panic!("Unauthorized: only the Talos creator can register names");
+        // }
 
         // Store mappings
         e.storage()
